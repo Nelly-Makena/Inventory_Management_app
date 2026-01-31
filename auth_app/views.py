@@ -10,7 +10,7 @@ from rest_framework.permissions import AllowAny
 User = get_user_model()
 
 class GoogleAuthView(APIView):
-    permission_classes = [AllowAny] 
+    permission_classes = [AllowAny]
     def post(self, request):
         token = request.data.get("id_token")
 
@@ -21,7 +21,7 @@ class GoogleAuthView(APIView):
             )
 
         try:
-            # Verify token with Google
+            # Verifying the  token with Google
             idinfo = id_token.verify_oauth2_token(
                 token,
                 requests.Request(),
@@ -38,7 +38,7 @@ class GoogleAuthView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Create or get user
+            # getting or veryfying the user 
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={
