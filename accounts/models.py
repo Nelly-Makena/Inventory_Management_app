@@ -11,7 +11,7 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES,
-        default='staff'
+        default='admin'
     )
 
     def __str__(self):
