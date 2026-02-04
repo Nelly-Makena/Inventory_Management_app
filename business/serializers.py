@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Business,Category,Supplier,Product
+from .models import Business,Category,Supplier,Product,Sale
 
 class BusinessSerializer(serializers.ModelSerializer):
     class Meta:
@@ -27,3 +27,9 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = "__all__"
         read_only_fields = ("business",)
+
+class SaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sale
+        fields = "__all__"
+        read_only_fields = ("unit_price", "total_price", "created_at")
