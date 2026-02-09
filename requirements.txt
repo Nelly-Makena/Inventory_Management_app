@@ -52,6 +52,7 @@ python-decouple==3.8
 python-dotenv==1.1.1
 PythonTurtle==0.3.2
 pytz==2024.1
+reportlab==4.4.9
 requests==2.31.0
 requests-oauthlib==2.0.0
 rsa==4.9.1
