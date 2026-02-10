@@ -3,13 +3,14 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Business, Category, Supplier, Product,Sale
+from .models import Business, Category, Supplier, Product,Sale,Notification
 from .serializers import (
     BusinessSerializer,
     CategorySerializer,
     SupplierSerializer,
     ProductSerializer,
     SaleSerializer,
+    NotificationSerializer,
 
 )
 class BusinessProfileView(APIView):
@@ -96,3 +97,36 @@ class SaleCreateView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+#for getting the notifications for the frontend to render
+class NotificationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        business = request.user.business
+        notifications = (
+            Notification.objects
+            .filter(business=business)
+            .order_by("-created_at")
+        )
+
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
+
+#to mark notifications read all
+class MarkAllNotificationsReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        business = request.user.business
+
+        Notification.objects.filter(
+            business=business,
+            is_read=False
+        ).update(is_read=True)
+
+        return Response(
+            {"detail": "All notifications marked as read"},
+            status=status.HTTP_200_OK
+        )

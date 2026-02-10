@@ -67,15 +67,61 @@ class Sale(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        # auto-calc the  prices
+        #auto-culc prices
         self.unit_price = self.product.unit_price
         self.total_price = self.unit_price * self.quantity
-
         # reduce stock
         self.product.quantity -= self.quantity
         self.product.save()
+
+        # checking the stock to see if we send a notification or not
+        if self.product.quantity < self.product.min_stock_level:
+            Notification.objects.create(
+                business=self.product.business,
+                product=self.product,
+                type=Notification.LOW_STOCK,
+                message=f"{self.product.name} is critically low - only {self.product.quantity} units left"
+            )
+
+        elif self.product.quantity > self.product.max_stock_level:
+            Notification.objects.create(
+                business=self.product.business,
+                product=self.product,
+                type=Notification.OVER_STOCK,
+                message=f"{self.product.name} exceeds maximum stock level"
+            )
 
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.product.name} - {self.quantity}"
+
+
+class Notification(models.Model):
+    LOW_STOCK = "LOW_STOCK"
+    OVER_STOCK = "OVER_STOCK"
+
+    TYPE_CHOICES = [
+        (LOW_STOCK, "Low Stock"),
+        (OVER_STOCK, "Over Stock"),
+    ]
+
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.CASCADE,
+        related_name="notifications"
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="notifications"
+    )
+
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    message = models.TextField()
+
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.message

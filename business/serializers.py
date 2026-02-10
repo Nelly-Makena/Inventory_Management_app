@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Business,Category,Supplier,Product,Sale
+from .models import Business,Category,Supplier,Product,Sale,Notification
 
 class BusinessSerializer(serializers.ModelSerializer):
     class Meta:
@@ -33,3 +33,17 @@ class SaleSerializer(serializers.ModelSerializer):
         model = Sale
         fields = "__all__"
         read_only_fields = ("unit_price", "total_price", "created_at")
+
+class NotificationSerializer(serializers.ModelSerializer):
+        product_id = serializers.IntegerField(source="product.id", read_only=True)
+
+        class Meta:
+            model = Notification
+            fields = [
+                "id",
+                "type",
+                "message",
+                "product_id",
+                "is_read",
+                "created_at",
+            ]
