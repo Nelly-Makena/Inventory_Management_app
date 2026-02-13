@@ -6,11 +6,17 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
+from django.utils.timezone import now
+
+from business.models import Business
+from admin_panel.models import BusinessUser, Invitation
 
 User = get_user_model()
 
+
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         token = request.data.get("id_token")
 
@@ -21,7 +27,6 @@ class GoogleAuthView(APIView):
             )
 
         try:
-            # Verifying the  token with Google
             idinfo = id_token.verify_oauth2_token(
                 token,
                 requests.Request(),
@@ -38,7 +43,6 @@ class GoogleAuthView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # getting or veryfying the user 
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={
@@ -47,6 +51,52 @@ class GoogleAuthView(APIView):
                     "username": email,
                 }
             )
+
+            # Update last_active
+            business_user = BusinessUser.objects.filter(user=user).first()
+            if business_user:
+                business_user.last_active = now()
+                business_user.save(update_fields=["last_active"])
+
+            # If user does NOT yet belong to any business
+            if not business_user:
+
+                # the first step is checking the invitation
+                invitation = Invitation.objects.filter(
+                    email=email,
+                    accepted=False
+                ).first()
+
+                if invitation:
+                    # step 2 is to link the new user to the invite
+                    BusinessUser.objects.create(
+                        user=user,
+                        business=invitation.business,
+                        role=invitation.role,
+                        is_active=True,
+                        last_active=now()
+                    )
+
+                    invitation.accepted = True
+                    invitation.save()
+
+                else:
+                    # if theres no invite it means its a first time users they can create a business
+
+                    business = Business.objects.create(
+                        owner=user,
+                        name=f"{first_name}'s Business",
+                        phone_number="",
+                        address=""
+                    )
+
+                    BusinessUser.objects.create(
+                        user=user,
+                        business=business,
+                        role="ADMIN",
+                        is_active=True,
+                        last_active=now()
+                    )
 
             return Response(
                 {

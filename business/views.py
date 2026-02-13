@@ -13,6 +13,10 @@ from .serializers import (
     NotificationSerializer,
 
 )
+from admin_panel.models import ActivityLog, BusinessUser
+from admin_panel.utils import log_activity
+
+
 class BusinessProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -77,25 +81,52 @@ class SupplierListCreateView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+
+
 class ProductCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        business = request.user.business
+        business_user = BusinessUser.objects.get(user=request.user)
+        business = business_user.business
+
         serializer = ProductSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(business=business)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        product = serializer.save(business=business)
+
+        # getting the activity Log
+        ActivityLog.objects.create(
+            business=business,
+            user=request.user,
+            action="Created Product",
+            description=f"Added product '{product.name}'"
+        )
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class SaleCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        business_user = BusinessUser.objects.get(user=request.user)
+        business = business_user.business
+
         serializer = SaleSerializer(data=request.data)
+
         if serializer.is_valid():
-            serializer.save()
+            sale = serializer.save()
+
+            # activity log
+            ActivityLog.objects.create(
+                business=business,
+                user=request.user,
+                action="Created Sale",
+                description=f"Sold {sale.quantity} unit(s) of '{sale.product.name}'"
+            )
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
