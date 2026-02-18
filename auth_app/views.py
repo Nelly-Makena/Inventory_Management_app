@@ -7,6 +7,7 @@ from rest_framework import status
 from django.contrib.auth import get_user_model
 from rest_framework.permissions import AllowAny
 from django.utils.timezone import now
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from business.models import Business
 from admin_panel.models import BusinessUser, Invitation
@@ -61,14 +62,13 @@ class GoogleAuthView(APIView):
             # If user does NOT yet belong to any business
             if not business_user:
 
-                # the first step is checking the invitation
+                # Check for a pending invitation first
                 invitation = Invitation.objects.filter(
                     email=email,
                     accepted=False
                 ).first()
 
                 if invitation:
-                    # step 2 is to link the new user to the invite
                     BusinessUser.objects.create(
                         user=user,
                         business=invitation.business,
@@ -76,20 +76,17 @@ class GoogleAuthView(APIView):
                         is_active=True,
                         last_active=now()
                     )
-
                     invitation.accepted = True
                     invitation.save()
 
                 else:
-                    # if theres no invite it means its a first time users they can create a business
-
+                    # First-time user — create their business
                     business = Business.objects.create(
                         owner=user,
                         name=f"{first_name}'s Business",
                         phone_number="",
                         address=""
                     )
-
                     BusinessUser.objects.create(
                         user=user,
                         business=business,
@@ -98,15 +95,20 @@ class GoogleAuthView(APIView):
                         last_active=now()
                     )
 
+            # Generate token for the authenticated user
+            refresh = RefreshToken.for_user(user)
+
             return Response(
                 {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
                     "user": {
                         "id": user.id,
                         "email": user.email,
                         "first_name": user.first_name,
                         "last_name": user.last_name,
                         "created": created,
-                    }
+                    },
                 },
                 status=status.HTTP_200_OK
             )

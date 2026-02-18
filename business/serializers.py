@@ -2,6 +2,11 @@ from rest_framework import serializers
 from .models import Business,Category,Supplier,Product,Sale,Notification
 
 class BusinessSerializer(serializers.ModelSerializer):
+    # Allow blank to allow partial profiles
+    name = serializers.CharField(required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = Business
         fields = ["id", "name", "phone_number", "address"]
