@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Business,Category,Supplier,Product,Sale,Notification
+from .models import Business,Category,Supplier,Product,Sale,Notification,NotificationPreference
 
 class BusinessSerializer(serializers.ModelSerializer):
     # Allow blank to allow partial profiles
@@ -52,3 +52,8 @@ class NotificationSerializer(serializers.ModelSerializer):
                 "is_read",
                 "created_at",
             ]
+
+class NotificationPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationPreference
+        fields = ["low_stock_alerts", "overstock_alerts"]
