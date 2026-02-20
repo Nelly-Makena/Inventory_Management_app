@@ -43,6 +43,7 @@ class Product(models.Model):
 
     name = models.CharField(max_length=255)
     quantity = models.PositiveIntegerField()
+    cost_price = models.PositiveIntegerField(default=0)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     min_stock_level = models.PositiveIntegerField()
     max_stock_level = models.PositiveIntegerField()

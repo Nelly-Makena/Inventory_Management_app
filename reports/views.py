@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Sum, F
 from django.db.models.functions import TruncMonth
 
 from .services import get_analytics
@@ -10,6 +11,9 @@ import csv
 from django.http import HttpResponse
 
 from reportlab.pdfgen import canvas
+from business.models import Sale
+from admin_panel.models import BusinessUser
+
 
 class AnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -37,7 +41,7 @@ class RevenueProfitGraphView(APIView):
 
         data = (
             Sale.objects.filter(
-                business=request.user.business,
+                product__business=request.user.business,
                 created_at__gte=start_date
             )
             .annotate(month=TruncMonth("created_at"))
@@ -59,7 +63,7 @@ class ReportsCSVExportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        sales = Sale.objects.filter(business=request.user.business)
+        sales = Sale.objects.filter(product__business=request.user.business)
 
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = 'attachment; filename="sales_report.csv"'
@@ -90,7 +94,7 @@ class ReportsPDFExportView(APIView):
         p.drawString(100, 800, "Sales Report")
 
         y = 760
-        sales = Sale.objects.filter(business=request.user.business)
+        sales = Sale.objects.filter(product__business=request.user.business)
 
         for sale in sales:
             line = f"{sale.product.name} | {sale.quantity} | {sale.unit_price}"

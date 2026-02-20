@@ -1,13 +1,12 @@
 from django.db.models import Sum, F, DecimalField
 from django.db.models.functions import TruncMonth
-
 from business.models import Sale
 
 
 def get_analytics(business, start_date):
     sales = (
         Sale.objects
-        .filter(business=business, created_at__gte=start_date)
+        .filter(product__business=business, created_at__gte=start_date)
         .select_related('product')
     )
 
