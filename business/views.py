@@ -17,7 +17,14 @@ from admin_panel.models import ActivityLog, BusinessUser
 from admin_panel.utils import log_activity
 
 
-# checks stock and creates a notification if the business has that alert enabled
+def get_business(user):
+    #businessuser works for every role
+    try:
+        return BusinessUser.objects.get(user=user).business
+    except BusinessUser.DoesNotExist:
+        return Business.objects.get(owner=user)
+
+
 def check_and_notify(product, business):
     prefs = getattr(business, 'notification_preferences', None)
     low_stock_on = prefs.low_stock_alerts if prefs else True
@@ -45,8 +52,7 @@ class BusinessProfileView(APIView):
     def get(self, request):
         try:
             business = Business.objects.get(owner=request.user)
-            serializer = BusinessSerializer(business)
-            return Response(serializer.data)
+            return Response(BusinessSerializer(business).data)
         except Business.DoesNotExist:
             return Response({}, status=status.HTTP_200_OK)
 
@@ -63,12 +69,12 @@ class CategoryListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         categories = Category.objects.filter(business=business)
         return Response(CategorySerializer(categories, many=True).data)
 
     def post(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         serializer = CategorySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(business=business)
@@ -79,12 +85,12 @@ class SupplierListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         suppliers = Supplier.objects.filter(business=business)
         return Response(SupplierSerializer(suppliers, many=True).data)
 
     def post(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         serializer = SupplierSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(business=business)
@@ -92,23 +98,20 @@ class SupplierListCreateView(APIView):
 
 
 class ProductListCreateView(APIView):
-    # get all products and post a new one
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        business_user = BusinessUser.objects.get(user=request.user)
-        products = Product.objects.filter(business=business_user.business)
+        business = get_business(request.user)
+        products = Product.objects.filter(business=business)
         return Response(ProductSerializer(products, many=True).data)
 
     def post(self, request):
-        business_user = BusinessUser.objects.get(user=request.user)
-        business = business_user.business
-
+        business = get_business(request.user)
         serializer = ProductSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         product = serializer.save(business=business)
 
-        check_and_notify(product, business)  # notify if stock already out of range
+        check_and_notify(product, business)
 
         ActivityLog.objects.create(
             business=business,
@@ -120,12 +123,11 @@ class ProductListCreateView(APIView):
 
 
 class ProductDetailView(APIView):
-    # single product — get, update, delete
     permission_classes = [IsAuthenticated]
 
     def get_object(self, pk, request):
-        business_user = BusinessUser.objects.get(user=request.user)
-        return Product.objects.get(pk=pk, business=business_user.business)
+        business = get_business(request.user)
+        return Product.objects.get(pk=pk, business=business)
 
     def get(self, request, pk):
         try:
@@ -144,11 +146,11 @@ class ProductDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         product = serializer.save()
 
-        business_user = BusinessUser.objects.get(user=request.user)
-        check_and_notify(product, business_user.business)  # notify if updated qty is out of range
+        business = get_business(request.user)
+        check_and_notify(product, business)
 
         ActivityLog.objects.create(
-            business=business_user.business,
+            business=business,
             user=request.user,
             action="Updated Product",
             description=f"Updated product '{product.name}'"
@@ -164,9 +166,9 @@ class ProductDetailView(APIView):
         name = product.name
         product.delete()
 
-        business_user = BusinessUser.objects.get(user=request.user)
+        business = get_business(request.user)
         ActivityLog.objects.create(
-            business=business_user.business,
+            business=business,
             user=request.user,
             action="Deleted Product",
             description=f"Deleted product '{name}'"
@@ -178,21 +180,17 @@ class SaleCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        business_user = BusinessUser.objects.get(user=request.user)
+        business = get_business(request.user)
         sales = Sale.objects.filter(
-            product__business=business_user.business
+            product__business=business
         ).order_by('-created_at')
         return Response(SaleSerializer(sales, many=True).data)
 
     def post(self, request):
-        business_user = BusinessUser.objects.get(user=request.user)
-        business = business_user.business
-
+        business = get_business(request.user)
         serializer = SaleSerializer(data=request.data)
         if serializer.is_valid():
             sale = serializer.save()
-
-            # recording the activity log
             ActivityLog.objects.create(
                 business=business,
                 user=request.user,
@@ -200,16 +198,14 @@ class SaleCreateView(APIView):
                 description=f"Sold {sale.quantity} unit(s) of '{sale.product.name}' at {sale.created_at.strftime('%H:%M on %d %b %Y')}"
             )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# get notifications for the frontend
 class NotificationListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         notifications = (
             Notification.objects
             .filter(business=business)
@@ -222,7 +218,7 @@ class MarkAllNotificationsReadView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         Notification.objects.filter(
             business=business,
             is_read=False
@@ -231,11 +227,10 @@ class MarkAllNotificationsReadView(APIView):
 
 
 class MarkNotificationReadView(APIView):
-    # for dismissing a single notification
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        business = request.user.business
+        business = get_business(request.user)
         try:
             notification = Notification.objects.get(pk=pk, business=business)
         except Notification.DoesNotExist:
@@ -246,17 +241,16 @@ class MarkNotificationReadView(APIView):
         return Response({"detail": "Marked as read."})
 
 
-# get and save notification preferences
 class NotificationPreferenceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         prefs, _ = NotificationPreference.objects.get_or_create(business=business)
         return Response(NotificationPreferenceSerializer(prefs).data)
 
     def post(self, request):
-        business = request.user.business
+        business = get_business(request.user)
         prefs, _ = NotificationPreference.objects.get_or_create(business=business)
         serializer = NotificationPreferenceSerializer(prefs, data=request.data)
         serializer.is_valid(raise_exception=True)

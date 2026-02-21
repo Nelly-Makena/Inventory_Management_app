@@ -107,6 +107,7 @@ class GoogleAuthView(APIView):
                         "email": user.email,
                         "first_name": user.first_name,
                         "last_name": user.last_name,
+                        "role": business_user.role if business_user else None,
                         "created": created,
                     },
                 },
