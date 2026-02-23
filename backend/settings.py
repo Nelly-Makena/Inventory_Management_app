@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'business',
     'reports',
     'admin_panel',
+    'dashboard',
 
 ]
 
