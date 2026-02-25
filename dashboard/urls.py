@@ -7,4 +7,3 @@ path("dashboard/", DashboardSummaryView.as_view()),
 ]
 
 
-

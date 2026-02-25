@@ -10,12 +10,23 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
-from dotenv import load_dotenv
 from pathlib import Path
+
+import dj_database_url
+from dotenv import load_dotenv
+
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _split_env_list(value):
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _normalize_origin(origin):
+    return origin.strip().rstrip("/")
 
 
 # Quick-start development settings - unsuitable for production
@@ -24,9 +35,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
+DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() in ("true", "1", "yes")
+ALLOWED_HOSTS = _split_env_list(os.getenv("DJANGO_ALLOWED_HOSTS", ""))
+RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+if RAILWAY_PUBLIC_DOMAIN and RAILWAY_PUBLIC_DOMAIN not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RAILWAY_PUBLIC_DOMAIN)
+
+if DEBUG and not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ["*"]
+
+if not SECRET_KEY and not DEBUG:
+    raise RuntimeError("DJANGO_SECRET_KEY must be set when DEBUG is False")
+
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+FRONTEND_URL = _normalize_origin(os.getenv("FRONTEND_URL", ""))
 
 # Application definition
 
@@ -51,6 +73,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -59,13 +82,31 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:5173",
-    "http://localhost:3000",
+    _normalize_origin(origin)
+    for origin in _split_env_list(os.getenv("DJANGO_CORS_ALLOWED_ORIGINS", ""))
 ]
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+if DEBUG:
+    for origin in (
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ):
+        if origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(origin)
+
+CORS_ALLOW_ALL_ORIGINS = os.getenv("DJANGO_CORS_ALLOW_ALL_ORIGINS", "False").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+CORS_ALLOW_CREDENTIALS = os.getenv("DJANGO_CORS_ALLOW_CREDENTIALS", "True").lower() in (
+    "true",
+    "1",
+    "yes",
+)
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -77,6 +118,41 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+CSRF_TRUSTED_ORIGINS = [
+    _normalize_origin(origin)
+    for origin in _split_env_list(os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", ""))
+]
+if FRONTEND_URL and FRONTEND_URL not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(FRONTEND_URL)
+if RAILWAY_PUBLIC_DOMAIN:
+    railway_origin = f"https://{RAILWAY_PUBLIC_DOMAIN}"
+    if railway_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(railway_origin)
+
+CSRF_COOKIE_SAMESITE = os.getenv("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
+SESSION_COOKIE_SAMESITE = os.getenv("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.getenv("DJANGO_SECURE_SSL_REDIRECT", "True").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_SECURE_HSTS_SECONDS", "3600"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = os.getenv(
+        "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "True"
+    ).lower() in ("true", "1", "yes")
+    SECURE_HSTS_PRELOAD = os.getenv("DJANGO_SECURE_HSTS_PRELOAD", "True").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
 ROOT_URLCONF = 'backend.urls'
 AUTH_USER_MODEL = 'accounts.User'
 REST_FRAMEWORK = {
@@ -110,19 +186,38 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-        },
+DATABASE_URL = (
+    os.getenv('DATABASE_URL')
+    or os.getenv('MYSQL_URL')
+    or os.getenv('MYSQL_PUBLIC_URL')
+)
+CONN_MAX_AGE = int(os.getenv('DJANGO_CONN_MAX_AGE', '600'))
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=CONN_MAX_AGE,
+        )
     }
-}
+    if DATABASES['default']['ENGINE'].endswith('mysql'):
+        DATABASES['default'].setdefault('OPTIONS', {})
+        DATABASES['default']['OPTIONS'].setdefault('charset', 'utf8mb4')
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.getenv('MYSQLDATABASE') or os.getenv('DB_NAME'),
+            'USER': os.getenv('MYSQLUSER') or os.getenv('DB_USER'),
+            'PASSWORD': os.getenv('MYSQLPASSWORD') or os.getenv('DB_PASSWORD'),
+            'HOST': os.getenv('MYSQLHOST') or os.getenv('DB_HOST'),
+            'PORT': os.getenv('MYSQLPORT') or os.getenv('DB_PORT'),
+            'CONN_MAX_AGE': CONN_MAX_AGE,
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+            },
+        }
+    }
 
 
 # Password validation
@@ -159,7 +254,13 @@ USE_TZ = True  # Must be True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
